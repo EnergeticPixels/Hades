@@ -1,35 +1,49 @@
-const mongoose = require('mongoose');
-mongoose.Promise = global.Promise;
 process.env.NODE_ENV='test';
-const dbConn = 'mongodb://localhost:27017/ametesting';
+//import mongoose from 'mongoose';
+const mongoose = require('mongoose');
+
+mongoose.Promise = global.Promise;
+
+//import MongodbMemoryServer from 'mongodb-memory-server';
+const MongodbMemoryServer = require('mongodb-memory-server').default;
+let mongoServer;
 
 before((done) => {
-    if (mongoose.connection.readyState) return done();
-    //if (mongoose.connection.db) return done();
-    mongoose.connect(dbConn, {useMongoClient: true});
-
-    mongoose.connection.once('connected', function() {
-        console.info('connection ahs been made. now make fireworks');
-        done();
-    }).on('error', function(error) {
-        console.warn('Connection error:', error);
+    mongoServer = new MongodbMemoryServer({
+        instance: {
+            port: 27017,
+            dbName: 'ametesting',
+            //dbPath: '../db/data',
+            debug: true
+        },
+        debug: true
     });
+    mongoServer.getConnectionString().then((mongoUri) => {
+        const mongooseOpts = {
+            autoReconnect: true,
+            reconnectTries: Number.MAX_VALUE,
+            reconnectInterval: 1000,
+            useMongoClient: true
+        };
+        return mongoose.connect(mongoUri, mongooseOpts, (err) => {
+            console.log(err);
+        });
+    }).then(() => done());
 });
 
 beforeEach((done) => {
     for (let collection in mongoose.connection.collections) {
         mongoose.connection.collections[collection].remove(() => {});
     };
-    //console.info('collection cleared');
+    console.info('collection cleared');
     done();
 });
 
 after((done) => {
     mongoose.connection.db.dropDatabase(() => {
-        mongoose.connection.close(() => {
-            //console.log('Mongoose default connection disconnected through app termination');
-            //process.exit(0);
-            done();
-        });
-    });
+        console.info('database dropped');
+        mongoose.disconnect();
+    })
+    mongoServer.stop();
+    done();
 });
